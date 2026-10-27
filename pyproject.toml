@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "failfirst"
+version = "0.1.0"
+description = "An AI agent that turns a GitHub bug report into a failing pytest test, inside a Docker sandbox."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = ["anthropic==2.3.0", "openai==3.39.0", "pytest==9.1.1"]
+
+[project.scripts]
+failfirst = "failfirst.cli:main"
+
+[tool.setuptools]
+packages = ["failfirst"]
