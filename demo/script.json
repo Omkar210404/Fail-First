@@ -1,0 +1,73 @@
+{
+  "_note": "Scripted demo provider: these turns are replayed in order. This is NOT a real LLM.",
+  "turns": [
+    {
+      "text": "The report says the bulk discount is missing at exactly 10 items. I'll look at the repository layout first.",
+      "tool_calls": [
+        {
+          "name": "list_files",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "The cart logic is probably in shopcart/cart.py. Searching for the discount code to confirm.",
+      "tool_calls": [
+        {
+          "name": "search_code",
+          "args": {
+            "pattern": "BULK_|discount"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Reading cart.py to see how the threshold is compared.",
+      "tool_calls": [
+        {
+          "name": "read_file",
+          "args": {
+            "path": "shopcart/cart.py",
+            "start_line": 1,
+            "end_line": 40
+          }
+        }
+      ]
+    },
+    {
+      "text": "total() uses item_count() > BULK_THRESHOLD, which excludes exactly 10 items. I'll write the smallest test that encodes the expected behaviour from the report.",
+      "tool_calls": [
+        {
+          "name": "write_test",
+          "args": {
+            "filename": "test_bulk_discount_threshold.py",
+            "content": "from shopcart import Cart\n\n\ndef test_bulk_discount_applies_at_exactly_ten_items():\n    # Bug report: \"orders of 10 or more items get a 10% bulk discount\",\n    # but 10 items at 2.00 return 20.0 instead of 18.0.\n    cart = Cart()\n    cart.add(\"pen\", 2.00, qty=10)\n    assert cart.total() == 18.0\n"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Running the test. It should fail on the assertion, not on an import or collection error.",
+      "tool_calls": [
+        {
+          "name": "run_tests",
+          "args": {
+            "filename": "test_bulk_discount_threshold.py"
+          }
+        }
+      ]
+    },
+    {
+      "text": "The test fails on the assertion 20.0 == 18.0, which is exactly the behaviour in the report.",
+      "tool_calls": [
+        {
+          "name": "finish",
+          "args": {
+            "verdict": "REPRODUCED",
+            "explanation": "The test adds 10 items at 2.00 and expects total() == 18.0, as the report and README describe (10% off for 10 or more items). It fails with 'assert 20.0 == 18.0': no discount is applied at exactly 10 items. shopcart/cart.py compares item_count() > BULK_THRESHOLD, so the discount only starts at 11 items. The failure is an assertion about the reported behaviour, not an import, syntax or fixture error."
+          }
+        }
+      ]
+    }
+  ]
+}
