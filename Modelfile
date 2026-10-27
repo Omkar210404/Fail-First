@@ -1,0 +1,4 @@
+# Ollama model with a 16k context window (the 4096 default is too small for an agent run).
+# ollama create qwen2.5-coder-16k -f Modelfile
+FROM qwen2.5-coder:7b
+PARAMETER num_ctx 16384

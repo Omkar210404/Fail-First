@@ -231,8 +231,11 @@ class Agent:
                     stop = "no progress: the model answered 3 turns in a row without a tool call"
                     verdict, explanation = "NOT_REPRODUCED", f"Stopped: {stop}."
                     break
-                messages.append({"role": "user", "content": "Continue by calling one of the tools through the "
-                                 "tool-calling interface. Call finish when you are done."})
+                messages.append({"role": "user", "content": (
+                    "You did not call a tool. Tools only run when YOU call them; nobody else will call them for you. "
+                    "Reply now with a tool call. If the tool-calling interface does not work for you, reply with only "
+                    'one JSON object, for example {"name": "write_test", "arguments": {"filename": "test_bug.py", '
+                    '"content": "..."}}. Call finish when you are done.')})
                 continue
             idle_turns = 0
             results = []
