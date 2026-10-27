@@ -12,6 +12,8 @@ Each report includes the test file, the reasoning and a step log. FailFirst neve
 
 > Evaluation tooling is included but results have not been measured yet.
 
+**Project page:** https://omkar210404.github.io/Fail-First/ (it replays real recorded runs; GitHub Pages cannot run the agent itself).
+
 ## Screenshots
 
 The local web page (`failfirst ui`), before a run and after the offline demo. The demo uses a scripted model, not a real LLM.

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FailFirst</title>
+<meta name="description" content="An AI agent that turns a GitHub bug report into a failing pytest test inside a sandbox.">
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1d212a;--line:#2a2f3a;--text:#e6e8ec;--dim:#9aa3b2;--acc:#7aa2ff;--ok:#3fcf8e;--bad:#ff6b6b;--warn:#f5c451;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--acc)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header{padding:56px 0 32px;border-bottom:1px solid var(--line)}
+.kicker{color:var(--acc);font-weight:600;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
+h1{font-size:clamp(34px,6vw,52px);margin:6px 0 10px;line-height:1.1}
+.lead{font-size:clamp(17px,2.4vw,20px);color:var(--dim);max-width:720px;margin:0 0 22px}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-block;padding:10px 16px;border-radius:8px;font-weight:600;text-decoration:none;border:1px solid var(--acc)}
+.btn.main{background:var(--acc);color:#0b0d12}.btn.ghost{color:var(--acc)}
+.pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.pill{border:1px solid var(--line);border-radius:99px;padding:3px 11px;font-size:13px;color:var(--dim)}
+section{padding:48px 0;border-bottom:1px solid var(--line)}
+h2{font-size:26px;margin:0 0 6px}
+.sub{color:var(--dim);margin:0 0 24px;max-width:760px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;counter-reset:s;padding:0;margin:0;list-style:none}
+.steps li{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;counter-increment:s}
+.steps li::before{content:counter(s);display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);color:var(--acc);font-weight:700;font-size:13px;margin-bottom:8px}
+.steps b{display:block;margin-bottom:2px}.steps span{color:var(--dim);font-size:14.5px}
+.note{background:#1b2233;border:1px solid #2d3a57;border-radius:10px;padding:12px 14px;color:#c9d4ea;font-size:14.5px;margin-bottom:18px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.tab{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 13px;font:inherit;font-size:14.5px;cursor:pointer}
+.tab[aria-selected=true]{border-color:var(--acc);background:#1a2236}
+.tab .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.viewer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px}
+.viewer>*{min-width:0}
+@media(max-width:860px){.viewer{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card h3{margin:0 0 10px;font-size:15px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.badge{display:inline-block;padding:3px 11px;border-radius:99px;font-weight:700;font-size:13px}
+.REPRODUCED{background:#123d2b;color:var(--ok)}.NOT_REPRODUCED{background:#43181b;color:var(--bad)}.NEEDS_INFO{background:#45391a;color:var(--warn)}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px;margin:12px 0}
+.meta dt{color:var(--dim)}.meta dd{margin:0;overflow-wrap:anywhere}
+pre{background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;font:12.5px/1.5 var(--mono);margin:8px 0 0;max-height:320px}
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{border-left:2px solid var(--line);padding:0 0 12px 14px;position:relative}
+.timeline li::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--line)}
+.timeline li.tool::before{background:var(--acc)}.timeline li.err::before{background:var(--bad)}
+.timeline li.hidden{display:none}
+.turn{color:var(--dim);font-size:12.5px}
+.thought{color:#c3cad6;font-size:14.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.call{font:13px var(--mono);overflow-wrap:anywhere}.call b{color:var(--acc);font-family:system-ui,sans-serif}
+details summary{cursor:pointer;color:var(--dim);font-size:13px;margin-top:3px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.controls button{background:transparent;color:var(--acc);border:1px solid var(--acc);border-radius:7px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}
+.controls button.solid{background:var(--acc);color:#0b0d12}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.shots figure{margin:0}.shots img{width:100%;height:auto;border-radius:10px;border:1px solid var(--line);display:block}
+.shots figcaption{color:var(--dim);font-size:14px;margin-top:6px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.cols ul{margin:0;padding-left:18px}.cols li{margin:5px 0;font-size:15px}
+code{font-family:var(--mono);font-size:.92em;background:#0c0e12;border:1px solid var(--line);border-radius:4px;padding:0 4px}
+footer{padding:28px 0 40px;color:var(--dim);font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="kicker">AI agent · Python · pytest · Docker</div>
+  <h1>FailFirst</h1>
+  <p class="lead">Give it a public GitHub repo, the buggy commit and a bug report. It explores the code in a sandbox, writes the smallest <b>failing pytest test</b> that captures the bug, runs it, and reports REPRODUCED, NOT_REPRODUCED or NEEDS_INFO. It never fixes the bug, never pushes and never comments.</p>
+  <div class="btns">
+    <a class="btn main" href="https://github.com/Omkar210404/Fail-First">View on GitHub</a>
+    <a class="btn ghost" href="#runs">See recorded runs</a>
+    <a class="btn ghost" href="#run">Run it yourself</a>
+  </div>
+  <div class="pill-row"><span class="pill">Anthropic SDK</span><span class="pill">OpenAI-compatible / Ollama</span><span class="pill">Docker sandbox, --network none</span><span class="pill">6 tools</span><span class="pill">Harness-checked verdicts</span><span class="pill">Offline demo, no key</span></div>
+</div></header>
+
+<section><div class="wrap">
+  <h2>How it works</h2>
+  <p class="sub">The model only gets six tools. It never gets a shell, the network or write access to the repository.</p>
+  <ol class="steps">
+    <li><b>Input</b><span>A repo URL, the buggy commit and the bug report text.</span></li>
+    <li><b>Setup</b><span>A throwaway Docker container clones the repo and installs it. It has network access only for this step.</span></li>
+    <li><b>Explore</b><span>A second container with no network. The model reads the report and uses <code>list_files</code>, <code>read_file</code> and <code>search_code</code>.</span></li>
+    <li><b>Test</b><span>It writes the smallest test that expects the correct behaviour (<code>write_test</code>) and runs it (<code>run_tests</code>).</span></li>
+    <li><b>Check</b><span>A REPRODUCED claim counts only if the test fails twice with a real test failure, not an import, syntax or fixture error.</span></li>
+    <li><b>Report</b><span><code>report.md</code>, <code>run.json</code> and the test file, plus budgets for steps, tokens, cost and time.</span></li>
+  </ol>
+</div></section>
+
+<section id="runs"><div class="wrap">
+  <h2>Recorded runs</h2>
+  <p class="sub">GitHub Pages can't run Python or an AI model, so this page <b>replays real recorded runs</b>. The data is copied unchanged from each run's <code>run.json</code>. All three are on the bundled demo project, a tiny shopping cart with a seeded off-by-one bug.</p>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="note" id="note"></div>
+  <div class="viewer">
+    <div>
+      <div class="card">
+        <h3>Result</h3>
+        <span id="badge" class="badge"></span>
+        <dl class="meta" id="meta"></dl>
+        <div id="expl" style="font-size:15px"></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>Bug report given to the agent</h3>
+        <pre id="issue"></pre>
+      </div>
+      <div class="card" style="margin-top:14px" id="testcard">
+        <h3 id="testname">Test file</h3>
+        <pre id="test"></pre>
+        <h3 style="margin-top:14px" id="runname">Last test run</h3>
+        <pre id="testrun"></pre>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Step log</h3>
+      <div class="controls"><button class="solid" id="play">▶ Replay step by step</button><button id="all">Show all</button></div>
+      <ol class="timeline" id="timeline"></ol>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>The local web app</h2>
+  <p class="sub">Running <code>failfirst ui</code> serves this page on 127.0.0.1 only. Use it to run the offline demo, try a real model, or run a real repository.</p>
+  <div class="shots">
+    <figure><img src="ui-home.png" alt="FailFirst web app: input form" loading="lazy"><figcaption>Input form and setup status</figcaption></figure>
+    <figure><img src="ui-demo-result.png" alt="FailFirst web app: demo result with verdict, test and step log" loading="lazy"><figcaption>A finished demo run</figcaption></figure>
+  </div>
+</div></section>
+
+<section id="run"><div class="wrap">
+  <h2>Run it yourself</h2>
+  <p class="sub">The offline demo needs only Python. The full setup guide (Ollama, Docker, real repos) is in the <a href="https://github.com/Omkar210404/Fail-First#setup-step-by-step">README</a>.</p>
+<pre>git clone https://github.com/Omkar210404/Fail-First
+cd Fail-First
+python -m venv .venv
+.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
+pip install -e .
+failfirst demo                    # scripted model, no key, no network
+failfirst ui                      # web app at http://127.0.0.1:8765</pre>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Honest status</h2>
+  <div class="cols">
+    <div class="card"><h3>Verified</h3><ul>
+      <li>The offline demo, end to end: tools, test run, harness check, reports</li>
+      <li>The guardrails: rejected false claims, step budget, path escapes, filename rules</li>
+      <li>A free local model (qwen2.5-coder 7B) on the demo: 7 runs, 3 harness-confirmed REPRODUCED</li>
+    </ul></div>
+    <div class="card"><h3>Not yet</h3><ul>
+      <li>The Docker sandbox has not been run. It was built on a machine without Docker.</li>
+      <li>No real-repository runs, and no evaluation results yet. The tooling is included.</li>
+      <li>The Anthropic provider has only been tested against a local stub. No paid API was used.</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">FailFirst · MIT licence · <a href="https://github.com/Omkar210404/Fail-First">github.com/Omkar210404/Fail-First</a></div></footer>
+
+<script>
+const DATA = {"runs": [{"title": "Scripted demo", "note": "The offline demo. The 'model' is a fixed script that replays tool calls. It is not an AI. Everything else (tools, test run, harness check, report) is real.", "provider": "scripted", "model": "replay of a fixed script, not a real LLM", "sandbox": "local (no isolation, demo only)", "verdict": "REPRODUCED", "explanation": "The test adds 10 items at 2.00 and expects total() == 18.0, as the report and README describe (10% off for 10 or more items). It fails with 'assert 20.0 == 18.0': no discount is applied at exactly 10 items. shopcart/cart.py compares item_count() > BULK_THRESHOLD, so the discount only starts at 11 items. The failure is an assertion about the reported behaviour, not an import, syntax or fixture error.", "harness_check": "passed: the test failed with a plain assertion/exception failure twice", "stop_reason": "finish called", "turns": 6, "seconds": 2.54, "tokens": {"input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": null}, "test_file": "test_bulk_discount_threshold.py", "test_content": "from shopcart import Cart\n\n\ndef test_bulk_discount_applies_at_exactly_ten_items():\n    # Bug report: \"orders of 10 or more items get a 10% bulk discount\",\n    # but 10 items at 2.00 return 20.0 instead of 18.0.\n    cart = Cart()\n    cart.add(\"pen\", 2.00, qty=10)\n    assert cart.total() == 18.0\n", "last_test_run": {"kind": "failed", "exit_code": 1, "output": "F                                                                        [100%]\n================================== FAILURES ===================================\n_______________ test_bulk_discount_applies_at_exactly_ten_items _______________\n\n    def test_bulk_discount_applies_at_exactly_ten_items():\n        # Bug report: \"orders of 10 or more items get a 10% bulk discount\",\n        # but 10 items at 2.00 return 20.0 instead of 18.0.\n        cart = Cart()\n        cart.add(\"pen\", 2.00, qty=10)\n>       assert cart.total() == 18.0\nE       assert 20.0 == 18.0\nE        +  where 20.0 = total()\nE        +    where total = <shopcart.cart.Cart object at 0x000002662D3C7410>.total\n\n..\\repro\\test_bulk_discount_threshold.py:9: AssertionError\n=========================== short test summary info ===========================\nFAILED ..\\repro\\test_bulk_discount_threshold.py::test_bulk_discount_applies_at_exactly_ten_items\n1 failed in 0.13s\n"}, "steps": [{"step": 1, "type": "model", "text": "The report says the bulk discount is missing at exactly 10 items. I'll look at the repository layout first."}, {"step": 1, "type": "tool", "tool": "list_files", "args": {}, "result": "README.md\npyproject.toml\nshopcart/__init__.py\nshopcart/cart.py\ntests/test_cart.py\n", "is_error": false, "seconds": 0.2}, {"step": 2, "type": "model", "text": "The cart logic is probably in shopcart/cart.py. Searching for the discount code to confirm."}, {"step": 2, "type": "tool", "tool": "search_code", "args": {"pattern": "BULK_|discount"}, "result": "README.md:3: A tiny shopping cart. Orders of **10 or more items** get a 10% bulk discount.\nshopcart/cart.py:1: \"\"\"Cart totals with a bulk discount.\"\"\"\nshopcart/cart.py:3: BULK_THRESHOLD = 10  # orders of this many items or more get the bulk discount\nshopcart/cart.py:4: BULK_RATE = 0.10\nshopcart/cart.py:25: if self.item_count() > BULK_THRESHOLD:\nshopcart/cart.py:26: amount *= 1 - BULK_RATE\ntests/test_cart.py:11: def test_bulk_discount_for_large_orders():\n", "is_error": false, "seconds": 0.22}, {"step": 3, "type": "model", "text": "Reading cart.py to see how the threshold is compared."}, {"step": 3, "type": "tool", "tool": "read_file", "args": {"path": "shopcart/cart.py", "start_line": 1, "end_line": 40}, "result": "    1| \"\"\"Cart totals with a bulk discount.\"\"\"\n    2| \n    3| BULK_THRESHOLD = 10  # orders of this many items or more get the bulk discount\n    4| BULK_RATE = 0.10\n    5| \n    6| \n    7| class Cart:\n    8|     def __init__(self):\n    9|         self.items: dict[str, tuple[float, int]] = {}\n   10| \n   11|     def add(self, name: str, price: float, qty: int = 1) -> None:\n   12|         if price < 0 or qty < 1:\n   13|             raise ValueError(\"price must be >= 0 and qty >= 1\")\n   14|         old_price, old_qty = self.items.get(name, (price, 0))\n   15|         self.items[name] = (price, old_qty + qty)\n   16| \n   17|     def item_count(self) -> int:\n   18|         return sum(qty for _, qty in self.items.values())\n   19| \n   20|     def subtotal(self) -> float:\n   21|         return sum(price * qty for price, qty in self.items.values())\n   22| \n   23|     def total(self) -> float:\n   24|         amount = self.subtotal()\n   25|         if self.item_count() > BULK_THRESHOLD:\n   26|             amount *= 1 - BULK_RATE\n   27|         return round(amount, 2)\n[showing lines 1-27 of 27]\n", "is_error": false, "seconds": 0.21}, {"step": 4, "type": "model", "text": "total() uses item_count() > BULK_THRESHOLD, which excludes exactly 10 items. I'll write the smallest test that encodes the expected behaviour from the report."}, {"step": 4, "type": "tool", "tool": "write_test", "args": {"filename": "test_bulk_discount_threshold.py", "content": "from shopcart import Cart\n\n\ndef test_bulk_discount_applies_at_exactly_ten_items():\n    # Bug report: \"orders of 10 or more items get a 10% bulk discount\",\n    # but 10 items at 2.00 return 20.0 instead of 18.0.\n    cart = Cart()\n    cart.add(\"pen\", 2.00, qty=10)\n    assert cart.total() == 18.0\n"}, "result": "wrote test_bulk_discount_threshold.py (295 characters)\n", "is_error": false, "seconds": 0.22}, {"step": 5, "type": "model", "text": "Running the test. It should fail on the assertion, not on an import or collection error."}, {"step": 5, "type": "tool", "tool": "run_tests", "args": {"filename": "test_bulk_discount_threshold.py"}, "result": "[harness: exit code 1, classified as failed]\nF                                                                        [100%]\n================================== FAILURES ===================================\n_______________ test_bulk_discount_applies_at_exactly_ten_items _______________\n\n    def test_bulk_discount_applies_at_exactly_ten_items():\n        # Bug report: \"orders of 10 or more items get a 10% bulk discount\",\n        # but 10 items at 2.00 return 20.0 instead of 18.0.\n        cart = Cart()\n        cart.add(\"pen\", 2.00, qty=10)\n>       assert cart.total() == 18.0\nE       assert 20.0 == 18.0\nE        +  where 20.0 = total()\nE        +    where total = <shopcart.cart.Cart object at 0x000002662D3C7410>.total\n\n..\\repro\\test_bulk_discount_threshold.py:9: AssertionError\n=========================== short test summary info ===========================\nFAILED ..\\repro\\test_bulk_discount_threshold.py::test_bulk_discount_applies_at_exactly_ten_items\n1 failed in 0.13s\n", "is_error": false, "seconds": 0.82}, {"step": 6, "type": "model", "text": "The test fails on the assertion 20.0 == 18.0, which is exactly the behaviour in the report."}, {"step": 6, "type": "tool", "tool": "finish", "args": {"verdict": "REPRODUCED", "explanation": "The test adds 10 items at 2.00 and expects total() == 18.0, as the report and README describe (10% off for 10 or more items). It fails with 'assert 20.0 == 18.0': no discount is applied at exactly 10 \n... [102 characters trimmed] ...\ns. The failure is an assertion about the reported behaviour, not an import, syntax or fixture error."}, "result": "finished", "is_error": false, "seconds": 0.83}], "recorded": "20261027-190218"}, {"title": "Real local model: reproduced", "note": "qwen2.5-coder 7B running free on a laptop GPU through Ollama. It found the off-by-one, wrote a failing test, and the harness confirmed the failure twice.", "provider": "openai-compatible", "model": "qwen2.5-coder-16k", "sandbox": "local (no isolation, demo only)", "verdict": "REPRODUCED", "explanation": "The test checks that the `total` method of the `Cart` class returns the correct amount for an order with 10 items, applying a 10% bulk discount. The run showed that the test failed because the `total` method returned `20.0` instead of `18.0` when the cart contained 10 items. This matches the expected behaviour described in the bug report.", "harness_check": "passed: the test failed with a plain assertion/exception failure twice", "stop_reason": "finish called", "turns": 6, "seconds": 75.42, "tokens": {"input_tokens": 9694, "output_tokens": 579, "estimated_cost_usd": null}, "test_file": "test_cart.py", "test_content": "import shopcart.cart as cart\ndef test_bulk_discount_applied():\n    c = cart.Cart()\n    c.add(\"pen\", 2.00, qty=10)\n    assert c.total() == 18.0", "last_test_run": {"kind": "failed", "exit_code": 1, "output": "F                                                                        [100%]\n================================== FAILURES ===================================\n_________________________ test_bulk_discount_applied __________________________\n\n    def test_bulk_discount_applied():\n        c = cart.Cart()\n        c.add(\"pen\", 2.00, qty=10)\n>       assert c.total() == 18.0\nE       assert 20.0 == 18.0\nE        +  where 20.0 = total()\nE        +    where total = <shopcart.cart.Cart object at 0x00000273A5058650>.total\n\n..\\repro\\test_cart.py:5: AssertionError\n=========================== short test summary info ===========================\nFAILED ..\\repro\\test_cart.py::test_bulk_discount_applied - assert 20.0 == 18.0\n1 failed in 0.15s\n"}, "steps": [{"step": 1, "type": "tool", "tool": "list_files", "args": {}, "result": "README.md\npyproject.toml\nshopcart/__init__.py\nshopcart/cart.py\ntests/test_cart.py\n", "is_error": false, "seconds": 0.25}, {"step": 2, "type": "tool", "tool": "read_file", "args": {"path": "shopcart/cart.py"}, "result": "    1| \"\"\"Cart totals with a bulk discount.\"\"\"\n    2| \n    3| BULK_THRESHOLD = 10  # orders of this many items or more get the bulk discount\n    4| BULK_RATE = 0.10\n    5| \n    6| \n    7| class Cart:\n    8|     def __init__(self):\n    9|         self.items: dict[str, tuple[float, int]] = {}\n   10| \n   11|     def add(self, name: str, price: float, qty: int = 1) -> None:\n   12|         if price < 0 or qty < 1:\n   13|             raise ValueError(\"price must be >= 0 and qty >= 1\")\n   14|         old_price, old_qty = self.items.get(name, (price, 0))\n   15|         self.items[name] = (price, old_qty + qty)\n   16| \n   17|     def item_count(self) -> int:\n   18|         return sum(qty for _, qty in self.items.values())\n   19| \n   20|     def subtotal(self) -> float:\n   21|         return sum(price * qty for price, qty in self.items.values())\n   22| \n   23|     def total(self) -> float:\n   24|         amount = self.subtotal()\n   25|         if self.item_count() > BULK_THRESHOLD:\n   26|             amount *= 1 - BULK_RATE\n   27|         return round(amount, 2)\n[showing lines 1-27 of 27]\n", "is_error": false, "seconds": 0.26}, {"step": 3, "type": "tool", "tool": "write_test", "args": {"filename": "test_cart.py", "content": "import shopcart.cart as cart\ndef test_bulk_discount_applied():\n    c = cart.Cart()\n    c.add(\"pen\", 2.00, qty=10)\n    assert c.total() == 18.0"}, "result": "wrote test_cart.py (142 characters)\n", "is_error": false, "seconds": 0.21}, {"step": 4, "type": "tool", "tool": "run_tests", "args": {"filename": "test_cart.py"}, "result": "[harness: exit code 1, classified as failed]\nF                                                                        [100%]\n================================== FAILURES ===================================\n_________________________ test_bulk_discount_applied __________________________\n\n    def test_bulk_discount_applied():\n        c = cart.Cart()\n        c.add(\"pen\", 2.00, qty=10)\n>       assert c.total() == 18.0\nE       assert 20.0 == 18.0\nE        +  where 20.0 = total()\nE        +    where total = <shopcart.cart.Cart object at 0x00000273A5058650>.total\n\n..\\repro\\test_cart.py:5: AssertionError\n=========================== short test summary info ===========================\nFAILED ..\\repro\\test_cart.py::test_bulk_discount_applied - assert 20.0 == 18.0\n1 failed in 0.15s\n", "is_error": false, "seconds": 0.86}, {"step": 5, "type": "model", "text": "The test checks that the `total` method of the `Cart` class returns the correct amount for an order with 10 items, applying a 10% bulk discount.\n\nThe run showed that the test failed because the `total` method returned `20.0` instead of `18.0` when the cart contained 10 items. This matches the expected behaviour described in the bug report.\n\nCall `finish` with the verdict \"REPRODUCED\".\n\nExplanation:\n- The test asserts that the expected total for 10 items is `18.0`.\n- The actual result is `20.0`.\n- The discrepancy is due to the bulk discount not being applied exactly at 10 items, as per the bug report.\n\nVerdict: REPRODUCED"}, {"step": 6, "type": "tool", "tool": "finish", "args": {"verdict": "REPRODUCED", "explanation": "The test checks that the `total` method of the `Cart` class returns the correct amount for an order with 10 items, applying a 10% bulk discount. The run showed that the test failed because the `total`\n... [40 characters trimmed] ...\n` when the cart contained 10 items. This matches the expected behaviour described in the bug report."}, "result": "finished", "is_error": false, "seconds": 0.85}], "recorded": "20261027-190134"}, {"title": "Real local model: got it wrong", "note": "The same model on another run. It wrote a test that expects the BUGGY value (20.00), so the test passed and it answered NOT_REPRODUCED. A passing test can't prove a bug, so the harness can't catch this. That is why the evaluation also runs each test on the fix commit.", "provider": "openai-compatible", "model": "qwen2.5-coder-16k", "sandbox": "local (no isolation, demo only)", "verdict": "NOT_REPRODUCED", "explanation": "The test asserts that the total price of 10 'pen' items should be $20.00, which matches the expected behavior described in the bug report. However, since the test passed, it confirms that the current code is functioning correctly. Therefore, the issue described in the bug report is not reproducible with the provided test.", "harness_check": "not needed", "stop_reason": "finish called", "turns": 9, "seconds": 112.31, "tokens": {"input_tokens": 15280, "output_tokens": 638, "estimated_cost_usd": null}, "test_file": "test_cart.py", "test_content": "# test_cart.py\nfrom shopcart.cart import Cart\n\ndef test_bulk_discount_not_applied_at_10_items():\n    cart = Cart()\n    for _ in range(10):\n        cart.add(\"pen\", 2.00)\n    assert cart.total() == 20.00\n", "last_test_run": {"kind": "passed", "exit_code": 0, "output": ".                                                                        [100%]\n1 passed in 0.02s\n"}, "steps": [{"step": 1, "type": "tool", "tool": "list_files", "args": {}, "result": "README.md\npyproject.toml\nshopcart/__init__.py\nshopcart/cart.py\ntests/test_cart.py\n", "is_error": false, "seconds": 0.44}, {"step": 3, "type": "tool", "tool": "read_file", "args": {"path": "shopcart/cart.py"}, "result": "    1| \"\"\"Cart totals with a bulk discount.\"\"\"\n    2| \n    3| BULK_THRESHOLD = 10  # orders of this many items or more get the bulk discount\n    4| BULK_RATE = 0.10\n    5| \n    6| \n    7| class Cart:\n    8|     def __init__(self):\n    9|         self.items: dict[str, tuple[float, int]] = {}\n   10| \n   11|     def add(self, name: str, price: float, qty: int = 1) -> None:\n   12|         if price < 0 or qty < 1:\n   13|             raise ValueError(\"price must be >= 0 and qty >= 1\")\n   14|         old_price, old_qty = self.items.get(name, (price, 0))\n   15|         self.items[name] = (price, old_qty + qty)\n   16| \n   17|     def item_count(self) -> int:\n   18|         return sum(qty for _, qty in self.items.values())\n   19| \n   20|     def subtotal(self) -> float:\n   21|         return sum(price * qty for price, qty in self.items.values())\n   22| \n   23|     def total(self) -> float:\n   24|         amount = self.subtotal()\n   25|         if self.item_count() > BULK_THRESHOLD:\n   26|             amount *= 1 - BULK_RATE\n   27|         return round(amount, 2)\n[showing lines 1-27 of 27]\n", "is_error": false, "seconds": 0.45}, {"step": 4, "type": "model", "text": "From the code, it looks like the `Cart` class has a method `total` that calculates the total price of the items in the cart, including a 10% bulk discount for orders of 10 or more items. The `add` method adds items to the cart and updating the total price. The `BULK_THRESHOLD` and `BULK_RATE` are defined at the beginning of the file.\n\nLet's write a test to assert the expected behavior from the bug report, that the discount is not applied at exactly 10 items.\n\n```python\n# test_cart.py\nfrom shopcart.cart import Cart\n\ndef test_bulk_discount_not_applied_at_10_items():\n    cart = Cart()\n    for _ in range(10):\n        cart.add(\"pen\", 2.00)\n    assert cart.total() == 20.00\n```\n\nLet's write this test and run it."}, {"step": 5, "type": "tool", "tool": "write_test", "args": {"filename": "test_cart.py", "content": "# test_cart.py\nfrom shopcart.cart import Cart\n\ndef test_bulk_discount_not_applied_at_10_items():\n    cart = Cart()\n    for _ in range(10):\n        cart.add(\"pen\", 2.00)\n    assert cart.total() == 20.00\n"}, "result": "wrote test_cart.py (202 characters)\n", "is_error": false, "seconds": 0.52}, {"step": 6, "type": "model", "text": "Let's run this test and see if it reproduces the bug.\n\nCall the `run_tests` tool to execute the test file."}, {"step": 7, "type": "tool", "tool": "run_tests", "args": {"filename": "test_cart.py"}, "result": "[harness: exit code 0, classified as passed]\n.                                                                        [100%]\n1 passed in 0.02s\n", "is_error": false, "seconds": 1.37}, {"step": 8, "type": "model", "text": "According to the test output, the test `test_bulk_discount_not_applied_at_10_items` passed, meaning that the current code behaves as expected and does not apply the bulk discount at exactly 10 items.\n\n### Verdict\n- **Verdict:** NOT_REPRODUCED\n- **Explanation:** The test asserts that the total price of 10 \"pen\" items should be $20.00, which matches the expected behavior described in the bug report. However, since the test passed, it confirms that the current code is functioning correctly. Therefore, the issue described in the bug report is not reproducible with the provided test."}, {"step": 9, "type": "tool", "tool": "finish", "args": {"verdict": "NOT_REPRODUCED", "explanation": "The test asserts that the total price of 10 'pen' items should be $20.00, which matches the expected behavior described in the bug report. However, since the test passed, it confirms that the current \n... [23 characters trimmed] ...\nrectly. Therefore, the issue described in the bug report is not reproducible with the provided test."}, "result": "finished", "is_error": false, "seconds": 0.0}], "recorded": "20261027-183844"}], "issue": "# Bulk discount is not applied at exactly 10 items\n\nThe README says orders of 10 or more items get a 10% bulk discount.\n\nSteps to reproduce:\n\n```python\nfrom shopcart import Cart\ncart = Cart()\ncart.add(\"pen\", 2.00, qty=10)\nprint(cart.total())\n```\n\nExpected: `18.0` (20.00 minus 10%).\nActual: `20.0`. With 11 items the discount is applied, so it looks like an off-by-one.\n"};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const colour = {REPRODUCED:"var(--ok)", NOT_REPRODUCED:"var(--bad)", NEEDS_INFO:"var(--warn)"};
+let timer = null;
+
+DATA.runs.forEach((r, i) => {
+  const b = document.createElement("button");
+  b.className = "tab"; b.setAttribute("role", "tab");
+  b.innerHTML = `<span class="dot" style="background:${colour[r.verdict]}"></span>${esc(r.title)}`;
+  b.onclick = () => show(i);
+  $("tabs").appendChild(b);
+});
+$("issue").textContent = DATA.issue.trim();
+
+function show(i) {
+  clearInterval(timer);
+  const r = DATA.runs[i];
+  [...$("tabs").children].forEach((t, k) => t.setAttribute("aria-selected", k === i));
+  $("note").textContent = r.note;
+  $("badge").className = "badge " + r.verdict; $("badge").textContent = r.verdict;
+  const rows = [["Model", r.provider === "scripted" ? "scripted replay (not an AI)" : r.model],
+    ["Sandbox", r.sandbox], ["Turns", r.turns], ["Time", r.seconds + " s"],
+    ["Tokens in / out", r.tokens.input_tokens + " / " + r.tokens.output_tokens],
+    ["Harness check", r.harness_check], ["Stop reason", r.stop_reason]];
+  $("meta").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+  $("expl").textContent = r.explanation;
+  $("testcard").style.display = r.test_content ? "" : "none";
+  $("testname").textContent = "Test file: " + (r.test_file || "");
+  $("test").textContent = r.test_content || "";
+  $("runname").textContent = r.last_test_run ? `Last test run (${r.last_test_run.kind}, exit code ${r.last_test_run.exit_code})` : "";
+  $("testrun").textContent = r.last_test_run ? r.last_test_run.output.trim() : "";
+  $("timeline").innerHTML = r.steps.map(s => s.type === "model"
+    ? `<li><div class="turn">turn ${s.step} · model</div><div class="thought">${esc(s.text.trim())}</div></li>`
+    : `<li class="tool${s.is_error ? " err" : ""}"><div class="turn">turn ${s.step} · tool${s.is_error ? " · error" : ""} · ${s.seconds}s</div>
+       <div class="call"><b>${esc(s.tool)}</b> ${esc(JSON.stringify(s.args))}</div>
+       <details><summary>result</summary><pre>${esc(s.result)}</pre></details></li>`).join("");
+}
+
+$("all").onclick = () => { clearInterval(timer); [...$("timeline").children].forEach(li => li.classList.remove("hidden")); };
+$("play").onclick = () => {
+  clearInterval(timer);
+  const items = [...$("timeline").children];
+  items.forEach(li => li.classList.add("hidden"));
+  let k = 0;
+  timer = setInterval(() => { if (k >= items.length) return clearInterval(timer); items[k++].classList.remove("hidden"); }, 700);
+};
+show(1);
+</script>
+</body>
+</html>
