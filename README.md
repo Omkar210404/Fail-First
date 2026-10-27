@@ -61,8 +61,8 @@ Install Python 3.11 or newer from [python.org](https://www.python.org/downloads/
 ### Step 2: FailFirst and the offline demo (no key, no network)
 
 ```bash
-git clone https://github.com/Omkar210404/failfirst
-cd failfirst
+git clone https://github.com/Omkar210404/Fail-First
+cd Fail-First
 python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -e .
