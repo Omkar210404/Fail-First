@@ -12,6 +12,14 @@ Each report includes the test file, the reasoning and a step log. FailFirst neve
 
 > Evaluation tooling is included but results have not been measured yet.
 
+## Screenshots
+
+The local web page (`failfirst ui`), before a run and after the offline demo. The demo uses a scripted model, not a real LLM.
+
+![FailFirst home](docs/ui-home.png)
+
+![FailFirst demo result](docs/ui-demo-result.png)
+
 ## Architecture
 
 A **provider** layer hides the model behind one `complete()` call: Anthropic (official SDK, tool use), any OpenAI-compatible endpoint (including free local models through Ollama), or a **scripted** replay used by the demo. The **agent loop** sends the bug report (marked as untrusted data) and six tools to the model: `list_files`, `read_file`, `search_code`, `write_test`, `run_tests` and `finish`. It runs each tool call in the **sandbox** and enforces budgets (steps, tokens, optional cost cap, per-command timeouts, output trimming). The sandbox works in two phases. First, a throwaway Docker container with network access clones the repo at the commit and installs it. Then a second container with `--network none` runs the agent's commands, with CPU, memory and process limits, a read-only repo and one writable repro folder. When the model claims REPRODUCED, the harness checks that claim before accepting it: the test must fail twice in a row with a plain test failure, not an import, syntax, collection or fixture error. Every run writes `report.md`, `run.json` and the test file into `runs/`.
@@ -62,7 +70,7 @@ verdict: REPRODUCED  report: runs\20261027-123635-demo-shopcart-bundled
 ### Local web page
 
 ```bash
-failfirst ui        # then open http://127.0.0.1:8765
+failfirst ui        # then open http://127.0.0.1:8765  (or /#demo to start the demo right away)
 ```
 
 It has a **Run offline demo** button and a form for real runs: repo URL, commit, bug report and provider. It shows the verdict, the test, the last test output and the step log. It listens on 127.0.0.1 only and rejects requests from other sites.

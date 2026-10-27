@@ -58,6 +58,7 @@ function show(d){const u=d.usage, steps=d.steps.map(s=>s.type=="model"?`<li clas
  ${d.last_test_run?`<b>Last test run (${esc(d.last_test_run.kind)})</b><pre>${esc(d.last_test_run.output)}</pre>`:""}
  <b>Step log</b><ol>${steps}</ol>`}
 $("demo").onclick=()=>go("/api/demo",{});
+if(location.hash=="#demo")$("demo").click();
 $("run").onclick=()=>go("/api/run",{repo:$("repo").value.trim(),commit:$("commit").value.trim(),issue:$("issue").value,provider:$("provider").value,max_steps:+$("steps").value});
 </script></body></html>"""
 
