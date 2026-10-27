@@ -55,7 +55,9 @@ failfirst demo
 
 If Docker is running, the demo uses the Docker sandbox. The first time, Docker downloads `python:3.11-slim` and builds a small image, so that one step needs the network. Without Docker, the demo falls back to a **local subprocess mode with no isolation**, prints a warning, and refuses to run any project except the bundled demo. Use `failfirst demo --no-docker` to force the fallback.
 
-Output from a real run on Windows without Docker (lines shortened):
+To try a **real model** on the same demo project, set one up as in [Run on a real bug](#run-on-a-real-bug) step 2, then run `failfirst demo --provider openai-compatible` (free with Ollama) or `failfirst demo --provider anthropic` (costs money). The web page has a matching **Run demo with this model** button.
+
+Output from a real run of the scripted demo on Windows without Docker (lines shortened):
 
 ```text
 WARNING: Docker is not available, so the demo runs in LOCAL MODE with NO ISOLATION.

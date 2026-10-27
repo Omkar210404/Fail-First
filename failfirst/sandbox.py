@@ -152,7 +152,7 @@ class LocalSandbox(Sandbox):
 
     def exec(self, argv, stdin=None, timeout=60):
         try:
-            p = subprocess.run(argv, input=stdin, cwd=self.repo_root, env=self.env, capture_output=True,
+            p = subprocess.run(argv, input=stdin or "", cwd=self.repo_root, env=self.env, capture_output=True,
                                text=True, encoding="utf-8", errors="replace", timeout=timeout)
             return ExecResult(p.returncode, p.stdout + p.stderr)
         except subprocess.TimeoutExpired:
@@ -188,7 +188,8 @@ class DockerSandbox(Sandbox):
 
     def _docker(self, *args: str, stdin: str | None = None, timeout: int = 120) -> ExecResult:
         try:
-            p = subprocess.run(["docker", *args], input=stdin, capture_output=True, text=True,
+            # Always give stdin (empty if unused) so `docker exec -i` never waits on the parent's stdin.
+            p = subprocess.run(["docker", *args], input=stdin or "", capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=timeout)
             return ExecResult(p.returncode, p.stdout + p.stderr)
         except subprocess.TimeoutExpired:

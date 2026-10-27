@@ -128,7 +128,9 @@ class OpenAICompatibleProvider:
                 model=self.model, messages=msgs, max_tokens=max_tokens,
                 tools=[{"type": "function", "function": t} for t in tools])
         except Exception as exc:  # the openai package has many error types; report them all the same way
-            raise ProviderError(f"{self.base_url}: {type(exc).__name__}: {str(exc)[:300]}") from exc
+            hint = " (is the server running? For Ollama: start the Ollama app or run `ollama serve`)" \
+                if type(exc).__name__ == "APIConnectionError" else ""
+            raise ProviderError(f"{self.base_url}: {type(exc).__name__}: {str(exc)[:300]}{hint}") from exc
         choice = resp.choices[0]
         calls = []
         for i, tc in enumerate(choice.message.tool_calls or []):

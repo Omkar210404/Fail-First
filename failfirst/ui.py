@@ -27,7 +27,7 @@ button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}b
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:700;font-size:13px}
 .REPRODUCED{background:#123d2b;color:var(--ok)}.NOT_REPRODUCED{background:#43181b;color:var(--bad)}.NEEDS_INFO{background:#45391a;color:var(--warn)}
 pre{background:#0c0e12;border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;font-size:12.5px;max-height:340px}
-.dim{color:var(--dim);font-size:13px}.status span{margin-right:14px}ol{padding-left:20px}li{margin:4px 0}
+code{word-break:break-all}.dim{color:var(--dim);font-size:13px}.status span{margin-right:14px}ol{padding-left:20px}li{margin:4px 0}
 </style></head><body><main>
 <h1>FailFirst</h1><p class="sub">Turn a GitHub bug report into a failing pytest test. It never fixes the bug, never pushes, never comments.</p>
 <div class="status dim card" id="status">Checking setup...</div><br>
@@ -39,7 +39,8 @@ pre{background:#0c0e12;border:1px solid var(--line);border-radius:6px;padding:10
 <label>Bug report text</label><textarea id="issue" placeholder="Paste the issue text"></textarea>
 <label>Model provider</label><select id="provider"><option value="openai-compatible">OpenAI-compatible (free local Ollama by default)</option><option value="anthropic">Anthropic (paid API)</option></select>
 <label>Max model turns</label><input id="steps" type="number" value="25" min="1" max="100">
-<button id="run" class="alt">Run on real repo</button><div class="dim" id="hint"></div>
+<button id="run" class="alt">Run on real repo</button><button id="demoreal" class="alt">Run demo with this model</button>
+<div class="dim">"Run demo with this model" uses the bundled demo project with the selected real model (Ollama is free; Anthropic costs money).</div>
 </div><div class="card" id="out"><span class="dim">Results appear here.</span></div></div>
 </main><script>
 const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -58,6 +59,7 @@ function show(d){const u=d.usage, steps=d.steps.map(s=>s.type=="model"?`<li clas
  ${d.last_test_run?`<b>Last test run (${esc(d.last_test_run.kind)})</b><pre>${esc(d.last_test_run.output)}</pre>`:""}
  <b>Step log</b><ol>${steps}</ol>`}
 $("demo").onclick=()=>go("/api/demo",{});
+$("demoreal").onclick=()=>go("/api/demo",{provider:$("provider").value});
 if(location.hash=="#demo")$("demo").click();
 $("run").onclick=()=>go("/api/run",{repo:$("repo").value.trim(),commit:$("commit").value.trim(),issue:$("issue").value,provider:$("provider").value,max_steps:+$("steps").value});
 </script></body></html>"""
@@ -105,7 +107,8 @@ def serve(port: int = 8765, out_dir: str = "runs") -> None:
                 return self._send(409, {"error": "a run is already in progress"})
             try:
                 if self.path == "/api/demo":
-                    result = run_demo(out_dir)
+                    provider = make_provider(body["provider"]) if body.get("provider") else None
+                    result = run_demo(out_dir, provider=provider)
                 elif self.path == "/api/run":
                     provider = make_provider(body.get("provider", ""))
                     budget = Budget.from_env(max_steps=int(body.get("max_steps") or 25))

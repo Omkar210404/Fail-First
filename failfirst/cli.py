@@ -40,6 +40,8 @@ def main(argv=None) -> int:
 
     d = sub.add_parser("demo", help="offline demo: bundled project + SCRIPTED model, no key, no network")
     d.add_argument("--no-docker", action="store_true", help="force the local fallback (demo only)")
+    d.add_argument("--provider", choices=["anthropic", "openai-compatible"],
+                   help="use a real model on the demo project instead of the scripted one")
     d.add_argument("--out", default="runs")
 
     u = sub.add_parser("ui", help="local web page on 127.0.0.1 to run the demo or a real case")
@@ -48,7 +50,12 @@ def main(argv=None) -> int:
 
     a = ap.parse_args(argv)
     if a.cmd == "demo":
-        result = run_demo(a.out, force_local=a.no_docker)
+        try:
+            provider = make_provider(a.provider) if a.provider else None
+        except ProviderError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        result = run_demo(a.out, force_local=a.no_docker, provider=provider)
         print(f"\n{result['verdict']}: {result['explanation']}")
         return 0
     if a.cmd == "ui":

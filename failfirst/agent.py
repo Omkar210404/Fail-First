@@ -303,9 +303,10 @@ def run_case(provider, repo_url: str, commit: str, issue_text: str, budget: Budg
     return _finish(sb, meta, result, out_dir, t0, log)
 
 
-def run_demo(out_dir="runs", force_local=False, log=print) -> dict:
-    """The bundled demo with the SCRIPTED provider: no network, no API key."""
-    provider = ScriptedProvider(DEMO_DIR / "script.json")
+def run_demo(out_dir="runs", force_local=False, log=print, provider=None) -> dict:
+    """The bundled demo. Default: the SCRIPTED provider (no network, no key). Pass a provider to try a real model."""
+    scripted = provider is None
+    provider = provider or ScriptedProvider(DEMO_DIR / "script.json")
     issue = (DEMO_DIR / "issue.md").read_text(encoding="utf-8")
     t0 = time.time()
     if not force_local and DockerSandbox.available():
@@ -322,10 +323,13 @@ def run_demo(out_dir="runs", force_local=False, log=print) -> dict:
         log("WARNING: Docker is not available, so the demo runs in LOCAL MODE with NO ISOLATION.")
         log("WARNING: local mode is allowed only for the bundled demo project, never for real repositories.")
         sb, mode = LocalSandbox(DEMO_PROJECT), LocalSandbox.mode
-    log("NOTE: demo mode uses a SCRIPTED model that replays fixed tool calls. It is not a real LLM.")
+    if scripted:
+        log("NOTE: demo mode uses a SCRIPTED model that replays fixed tool calls. It is not a real LLM.")
+    else:
+        log(f"NOTE: demo project with a REAL model: {provider.name} ({provider.model}).")
     meta = {"repo": "demo/shopcart (bundled)", "commit": "working tree", "provider": provider.name,
             "model": provider.model, "sandbox": mode, "issue": issue}
-    result = Agent(provider, sb, Budget(), log).run(issue, "demo/shopcart (bundled demo project)")
+    result = Agent(provider, sb, Budget.from_env(), log).run(issue, "demo/shopcart (bundled demo project)")
     return _finish(sb, meta, result, out_dir, t0, log)
 
 
