@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -116,7 +118,7 @@ class OpenAICompatibleProvider:
             if m["role"] == "user":
                 msgs.append({"role": "user", "content": m["content"]})
             elif m["role"] == "assistant":
-                msg = {"role": "assistant", "content": m["text"] or None}
+                msg = {"role": "assistant", "content": m["text"] or ""}  # Ollama rejects null content
                 if m["tool_calls"]:
                     msg["tool_calls"] = [{"id": c.id, "type": "function", "function": {
                         "name": c.name, "arguments": c.bad_json or json.dumps(c.args)}} for c in m["tool_calls"]]
@@ -139,11 +141,47 @@ class OpenAICompatibleProvider:
                 calls.append(ToolCall(tc.id or f"call-{i}", tc.function.name, args if isinstance(args, dict) else {}))
             except json.JSONDecodeError:
                 calls.append(ToolCall(tc.id or f"call-{i}", tc.function.name, {}, bad_json=tc.function.arguments))
+        text = choice.message.content or ""
+        if not calls and text:
+            # Some local models write the call as JSON text instead of using tool_calls.
+            calls = parse_text_tool_calls(text, {t["name"] for t in tools})
+            if calls:
+                text = ""
         usage = resp.usage
-        return Reply(text=choice.message.content or "", tool_calls=calls,
+        return Reply(text=text, tool_calls=calls,
                      input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
                      output_tokens=getattr(usage, "completion_tokens", 0) or 0,
                      stop_reason=choice.finish_reason or "")
+
+
+def parse_text_tool_calls(text: str, names: set[str]) -> list[ToolCall]:
+    """Read tool calls written as JSON text ({"name": ..., "arguments": {...}}): inside <tool_call> tags,
+    inside ``` fences, or as JSON that ends the message. Every block found must be a valid call to a known
+    tool, otherwise nothing is returned, so ordinary prose or example code is never run by mistake."""
+    start = text.find('{"name"')
+    chunks = (re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.S)
+              or re.findall(r"```[A-Za-z]*\s*(\{.*?\})\s*```", text, re.S)
+              or [text[start:] if start >= 0 else text.strip()])
+    decoder, calls = json.JSONDecoder(), []
+    for chunk in chunks:
+        chunk, i = chunk.strip(), 0
+        while i < len(chunk):
+            try:
+                obj, i = decoder.raw_decode(chunk, i)
+            except ValueError:
+                return []
+            if not isinstance(obj, dict) or obj.get("name") not in names:
+                return []
+            args = obj.get("arguments", obj.get("parameters", {}))
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    return []
+            calls.append(ToolCall(f"text-call-{uuid.uuid4().hex[:10]}", obj["name"], args if isinstance(args, dict) else {}))
+            while i < len(chunk) and chunk[i] in " \t\r\n,":
+                i += 1
+    return calls
 
 
 class ScriptedProvider:

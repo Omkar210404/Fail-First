@@ -81,7 +81,12 @@ It has a **Run offline demo** button and a form for real runs: repo URL, commit,
 
 1. Start Docker.
 2. Choose a model and copy `.env.example` to `.env` (gitignored):
-   - **Free, local:** install Ollama, run `ollama pull qwen2.5-coder:7b`, then set `OPENAI_COMPAT_MODEL=qwen2.5-coder:7b`. The base URL defaults to `http://localhost:11434/v1`.
+   - **Free, local:** install Ollama and run `ollama pull qwen2.5-coder:7b`. Ollama's default context window (4,096 tokens) is too small for an agent conversation, because the model forgets the start of the run. So create a variant with a bigger one. Put these two lines in a file named `Modelfile`:
+     ```text
+     FROM qwen2.5-coder:7b
+     PARAMETER num_ctx 16384
+     ```
+     Then run `ollama create qwen2.5-coder-16k -f Modelfile` and set `OPENAI_COMPAT_MODEL=qwen2.5-coder-16k`. The base URL defaults to `http://localhost:11434/v1`. Some local models write tool calls as JSON text instead of real tool calls. FailFirst accepts those only when the text is a valid call to one of its six tools.
    - **Anthropic (paid):** set `ANTHROPIC_API_KEY`. The model defaults to `claude-opus-5-5`; change it with `ANTHROPIC_MODEL`. Requests use adaptive thinking, `ANTHROPIC_EFFORT=high` and the server-side refusal fallback (`ANTHROPIC_FALLBACKS=0` turns that off).
 3. Save the issue text to a file and run:
 
@@ -121,11 +126,11 @@ python scripts/eval.py --provider anthropic            # costs money for every c
 ## Limitations
 
 - **Not verified with Docker yet.** It was built on a machine without Docker, so only the local demo path has been run end to end. The Docker sandbox code (image build, two-phase setup, `--network none` exec) has not been run.
-- **Not tested against a real model.** The Anthropic and OpenAI-compatible providers were only tested against a local stub that imitates each API's request and response format.
+- **Real-model testing so far is a small smoke check, not an evaluation.** The OpenAI-compatible provider was run with a free local model (`qwen2.5-coder:7b` through Ollama with a 16k context, on a laptop RTX 3050) on the bundled demo only. In the last 3 runs, after fixing the issues those runs exposed, 2 ended REPRODUCED with the harness check passed. The third ended NOT_REPRODUCED because the model's test asserted the buggy value. Each run took about 40 seconds to 2 minutes. The Anthropic provider has only been tested against a local stub that imitates the API, because no paid API was used.
 - Setup is basic: `pip install -e .` (with common test extras) plus `requirements*.txt`. Projects that need system libraries, services or other build tools will end in NEEDS_INFO.
 - The test runs from a separate folder, so the repo's `conftest.py` fixtures and pytest settings are not applied.
 - The harness can rule out import, syntax, collection and fixture failures. Whether the failure matches the report's reason is still the model's judgement. A bug that really is an ImportError would be rejected.
-- Only Python projects with pytest. Small local models may not follow the tool-calling protocol well.
+- Only Python projects with pytest. Small local models make mistakes, for example asserting the buggy value or naming files wrongly. FailFirst then stops with NOT_REPRODUCED instead of guessing. A run also stops after 3 model turns in a row with no tool call.
 
 ## Project layout
 

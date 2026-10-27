@@ -28,11 +28,11 @@ You work in a sandbox that holds a checkout of the repository at the buggy commi
 Method:
 1. Read the bug report. Work out the reported wrong behaviour and the expected behaviour.
 2. Find the relevant code. Read only what you need.
-3. Write the smallest test that checks the expected behaviour from the report. One test function is usually enough. Use plain asserts or pytest.raises. Do not depend on the repository's conftest fixtures, the network, or files outside the repository.
+3. Write the smallest test that asserts the EXPECTED (correct) behaviour from the report, never the current wrong behaviour, so that it fails on this buggy code. One test function is usually enough. Use plain asserts or pytest.raises. Do not depend on the repository's conftest fixtures, the network, or files outside the repository.
 4. Run it. It must FAIL, and fail for the reason in the report: an assertion about the reported behaviour, or the reported exception. A failure caused by an ImportError, SyntaxError or NameError in your test, a missing fixture or a collection error does not count. Fix the test and run it again.
 5. Call finish with one verdict:
    - REPRODUCED: the last run of your test fails for the reported reason.
-   - NOT_REPRODUCED: your test is faithful to the report and the code behaves correctly, or you could not build a valid failing test.
+   - NOT_REPRODUCED: your test asserts the expected behaviour from the report and it passes (the code behaves correctly), or you could not build a valid failing test. If your test passes, first check that it asserts the expected value, not the buggy one.
    - NEEDS_INFO: the report is too vague to test (no clear expected behaviour), or needs something the sandbox cannot provide.
    In the explanation, say what the test checks, what the run showed, and why that matches the report (or does not).
 
@@ -140,18 +140,29 @@ class Agent:
             r = sb.tool("search", sb.repo_root, t, pattern=str(a.get("pattern", "")))
         elif name == "write_test":
             fn, content = str(a.get("filename", "")), str(a.get("content", ""))
+            fn = fn.replace("\\", "/").rsplit("/", 1)[-1]  # all tests live in the repro folder; keep the name only
             if not TEST_NAME.match(fn):
                 return "error: filename must look like test_something.py (letters, digits, underscores)", True
             if len(content) > 50_000:
                 return "error: test file is larger than 50 KB", True
+            note = ""
+            if "\n" not in content and "\\n" in content:
+                # Small models sometimes double-escape: the whole file arrives on one line with literal \n.
+                content = content.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
+                note = "\n[harness: the content had literal \\n sequences and no line breaks; converted them to newlines]"
             r = sb.tool("write", sb.repro_root, t, path=fn, content=content)
+            r.output += note
+            if r.code == 0 and fn != str(a.get("filename", "")):
+                r.output += f"\n[harness: saved as {fn} in the repro folder; use this name with run_tests]"
             if r.code == 0:
                 self.tests[fn] = content
                 self.runs.pop(fn, None)  # an earlier run no longer describes this file
         elif name == "run_tests":
-            fn = str(a.get("filename", ""))
+            fn = str(a.get("filename", "")).replace("\\", "/").rsplit("/", 1)[-1]
             if fn not in self.tests:
-                return f"error: {fn!r} was not written with write_test", True
+                written = ", ".join(self.tests) or "none yet"
+                return (f"error: {fn!r} was not written with write_test. Test files you have written: {written}. "
+                        "Call write_test first, then run_tests with the same filename."), True
             r = sb.pytest(fn, self.b.test_timeout)
             kind = classify_run(r)
             self.runs[fn] = {"kind": kind, "exit_code": r.code, "output": trim(r.output, 4000)}
@@ -184,7 +195,7 @@ class Agent:
         system = SYSTEM_PROMPT.format(max_steps=self.b.max_steps)
         verdict, explanation, stop = None, "", ""
         harness_check = "not needed"
-        turn = 0
+        turn = idle_turns = 0
         while verdict is None:
             cost = self.b.cost(self.tokens_in, self.tokens_out)
             if turn >= self.b.max_steps:
@@ -215,8 +226,15 @@ class Agent:
             messages.append({"role": "assistant", "text": reply.text, "tool_calls": reply.tool_calls,
                              "raw": reply.raw})
             if not reply.tool_calls:
-                messages.append({"role": "user", "content": "Continue with the tools. Call finish when you are done."})
+                idle_turns += 1
+                if idle_turns >= 3:
+                    stop = "no progress: the model answered 3 turns in a row without a tool call"
+                    verdict, explanation = "NOT_REPRODUCED", f"Stopped: {stop}."
+                    break
+                messages.append({"role": "user", "content": "Continue by calling one of the tools through the "
+                                 "tool-calling interface. Call finish when you are done."})
                 continue
+            idle_turns = 0
             results = []
             for call in reply.tool_calls:
                 started = time.time()
