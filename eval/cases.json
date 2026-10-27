@@ -1,0 +1,17 @@
+{
+  "_how_to": "Template. Copy the example, fill in a real closed bug issue whose merged fix PR adds a test, and set enabled to true. See the Evaluation section of the README.",
+  "cases": [
+    {
+      "id": "example-template",
+      "enabled": false,
+      "repo": "https://github.com/OWNER/REPO",
+      "issue_url": "https://github.com/OWNER/REPO/issues/NUMBER",
+      "fix_pr_url": "https://github.com/OWNER/REPO/pull/NUMBER",
+      "buggy_commit": "PARENT_SHA_OF_THE_FIX",
+      "fix_commit": "MERGE_OR_FIX_SHA",
+      "licence": "MIT",
+      "issue_text": "Paste the issue title and body here, or use \"issue_file\": \"issues/<id>.md\" (relative to this file).",
+      "notes": "Small pure-Python repo; the fix PR adds a regression test."
+    }
+  ]
+}
